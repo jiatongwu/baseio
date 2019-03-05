@@ -18,8 +18,8 @@ package com.firenio.baseio.buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.firenio.baseio.Develop;
@@ -37,26 +37,34 @@ import com.firenio.baseio.common.Util;
  */
 public final class PooledByteBufAllocator extends ByteBufAllocator {
 
-    public static Map<ByteBuf, BufDebug> BUF_DEBUGS        = new LinkedHashMap<>();
-    static final int                     BYTEBUF_BUFFER    = 1024 * 8;
-    static final boolean                 BYTEBUF_RECYCLE   = Options.isBufRecycle();
-    public static final ByteBufException EXPANSION_FAILED  = EXPANSION_FAILED();
-    static final boolean                 ENABLE_UNSAFE_BUF = Options.isEnableUnsafeBuf();
+    public static final Map<ByteBuf, BufDebug> BUF_DEBUGS;
+    static final int                           BYTEBUF_BUFFER    = 1024 * 8;
+    static final boolean                       BYTEBUF_RECYCLE   = Options.isBufRecycle();
+    public static final ByteBufException       EXPANSION_FAILED  = EXPANSION_FAILED();
+    static final boolean                       ENABLE_UNSAFE_BUF = Options.isEnableUnsafeBuf();
 
-    private long                         address           = -1;
-    private final int[]                  blockEnds;
-    private final Stack<ByteBuf>         bufBuffer;
-    private final int                    capacity;
-    private ByteBuffer                   directMemory;
-    private final BitSet                 frees;
-    private final ByteBufAllocatorGroup  group;
-    private final int                    groupSize;
-    private byte[]                       heapMemory;
-    private final boolean                isDirect;
-    private final ReentrantLock          lock              = new ReentrantLock();
-    private int                          mark;
-    private final int                    nextIndex;
-    private final int                    unit;
+    static {
+        if (Develop.BUF_DEBUG) {
+            BUF_DEBUGS = new ConcurrentHashMap<>();
+        } else {
+            BUF_DEBUGS = null;
+        }
+    }
+
+    private long                        address = -1;
+    private final int[]                 blockEnds;
+    private final Stack<ByteBuf>        bufBuffer;
+    private final int                   capacity;
+    private ByteBuffer                  directMemory;
+    private final BitSet                frees;
+    private final ByteBufAllocatorGroup group;
+    private final int                   groupSize;
+    private byte[]                      heapMemory;
+    private final boolean               isDirect;
+    private final ReentrantLock         lock    = new ReentrantLock();
+    private int                         mark;
+    private final int                   nextIndex;
+    private final int                   unit;
 
     public PooledByteBufAllocator(ByteBufAllocatorGroup group, int index) {
         this.group = group;
@@ -91,13 +99,11 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
     public ByteBuf allocate(int limit) {
         if (Develop.BUF_DEBUG) {
             ByteBuf buf = allocate(limit, 0);
-            if (buf instanceof ByteBuf) {
+            if (buf != null && buf.isPooled()) {
                 BufDebug d = new BufDebug();
                 d.buf = buf;
                 d.e = new Exception(DateUtil.get().formatYyyy_MM_dd_HH_mm_ss_SSS());
-                synchronized (BUF_DEBUGS) {
-                    BUF_DEBUGS.put(buf, d);
-                }
+                BUF_DEBUGS.put(buf, d);
             }
             return buf;
         } else {
@@ -106,6 +112,9 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
     }
 
     private ByteBuf allocate(int limit, int current) {
+        if (limit < 1) {
+            return null;
+        }
         if (current == groupSize) {
             // FIXME 是否申请java内存
             return ByteBuf.heap(limit);
@@ -356,15 +365,13 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
         if (BYTEBUF_RECYCLE) {
             bufBuffer.push(b);
         }
-        if (Develop.BUF_DEBUG) {
-            synchronized (BUF_DEBUGS) {
-                BufDebug d = BUF_DEBUGS.remove(buf);
-                if (d == null) {
-                    throw new RuntimeException("null bufDebug");
-                }
-                d.buf = null;
-                d.e = null;
+        if (Develop.BUF_DEBUG && buf.isPooled()) {
+            BufDebug d = BUF_DEBUGS.remove(buf);
+            if (d == null) {
+                throw new RuntimeException("null bufDebug");
             }
+            d.buf = null;
+            d.e = null;
         }
     }
 

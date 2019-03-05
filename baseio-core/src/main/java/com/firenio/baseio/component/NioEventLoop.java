@@ -282,12 +282,12 @@ public final class NioEventLoop extends EventLoop implements Attributes {
         Util.close(unsafe);
         Util.release(buf);
     }
-    
-    private boolean has_task(){
+
+    private boolean has_task() {
         return USE_HAS_TASK ? hasTask : !events.isEmpty();
     }
-    
-    private void clear_has_task(){
+
+    private void clear_has_task() {
         if (USE_HAS_TASK) {
             hasTask = false;
         }
@@ -322,7 +322,7 @@ public final class NioEventLoop extends EventLoop implements Attributes {
                 if (!has_task() && selecting.compareAndSet(0, 1)) {
                     if (has_task()) {
                         selected = unsafe.selectNow();
-                    }else{
+                    } else {
                         selected = unsafe.select(selectTime);
                     }
                     selecting.set(0);
@@ -613,6 +613,13 @@ public final class NioEventLoop extends EventLoop implements Attributes {
                 }
                 return;
             }
+            Channel old = channels.get(fd);
+            if (old != null) {
+                if (Develop.NATIVE_DEBUG) {
+                    logger.error("old channel ....................,open:{}", old.isOpen());
+                }
+                old.close();
+            }
             Channel ch = new Channel(el, ctx, new EpollChannelUnsafe(epfd, fd, ra, lp, rp));
             channels.put(fd, ch);
             ctx.getChannelManager().putChannel(ch);
@@ -850,7 +857,7 @@ public final class NioEventLoop extends EventLoop implements Attributes {
         }
 
         @Override
-        int select(long timeout)  {
+        int select(long timeout) {
             try {
                 return selector.select(timeout);
             } catch (IOException e) {
@@ -860,7 +867,7 @@ public final class NioEventLoop extends EventLoop implements Attributes {
         }
 
         @Override
-        int selectNow()  {
+        int selectNow() {
             try {
                 return selector.selectNow();
             } catch (IOException e) {

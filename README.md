@@ -10,8 +10,7 @@ BaseIO是基于java nio开发的一款可快速构建网络通讯项目的异步
 ## 项目特色
 
  * 支持协议扩展，已知的扩展协议有：
-   * Redis协议(仅作测试)，示例：详见 {baseio-test}
-   * FixedLength协议(固定长度报文头)，支持传输文本和二进制数据
+   * LengthValue协议，支持传输文本数据
    * HTTP1.1协议(lite)，示例： https://www.firenio.com/
    * WebSocket协议，示例： https://www.firenio.com/web-socket/chat/index.html 
    * Protobase(自定义协议)，支持传输文本或二进制数据
@@ -37,7 +36,9 @@ BaseIO是基于java nio开发的一款可快速构建网络通讯项目的异步
   ```Java
 
     public static void main(String[] args) throws Exception {
-        IoEventHandle eventHandle = new IoEventHandle() {
+
+        IoEventHandle eventHandleAdaptor = new IoEventHandle() {
+
             @Override
             public void accept(Channel ch, Frame f) throws Exception {
                 String text = f.getStringContent();
@@ -49,8 +50,8 @@ BaseIO是基于java nio开发的一款可快速构建网络通讯项目的异步
         };
         ChannelAcceptor context = new ChannelAcceptor(8300);
         context.addChannelEventListener(new LoggerChannelOpenListener());
-        context.setIoEventHandle(eventHandle);
-        context.addProtocolCodec(new FixedLengthCodec());
+        context.setIoEventHandle(eventHandleAdaptor);
+        context.addProtocolCodec(new LengthValueCodec());
         context.bind();
     }
 
@@ -61,7 +62,7 @@ BaseIO是基于java nio开发的一款可快速构建网络通讯项目的异步
   ```Java
 
     public static void main(String[] args) throws Exception {
-        ChannelConnector context = new ChannelConnector(8300);
+        ChannelConnector context = new ChannelConnector("127.0.0.1", 8300);
         IoEventHandle eventHandle = new IoEventHandle() {
             @Override
             public void accept(Channel ch, Frame f) throws Exception {
@@ -74,11 +75,10 @@ BaseIO是基于java nio开发的一款可快速构建网络通讯项目的异步
 
         context.setIoEventHandle(eventHandle);
         context.addChannelEventListener(new LoggerChannelOpenListener());
-        context.addProtocolCodec(new FixedLengthCodec());
-        Channel ch = context.connect();
-        FixedLengthFrame frame = new FixedLengthFrame();
-        frame.setContent(ch.allocate());
-        frame.write("hello world!", ch);
+        context.addProtocolCodec(new LengthValueCodec());
+        Channel ch = context.connect(3000);
+        LengthValueFrame frame = new LengthValueFrame();
+        frame.setString("hello server!");
         ch.writeAndFlush(frame);
     }
 

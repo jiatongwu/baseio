@@ -234,8 +234,8 @@ public class HttpCodec extends ProtocolCodec {
     @Override
     public Frame decode(Channel ch, ByteBuf src) throws Exception {
         boolean remove = false;
-        HttpAttr attr = (HttpAttr) ch.getAttachment();
-        HttpFrame f = attr.getUncompleteFrame();
+        HttpAttachment att = (HttpAttachment) ch.getAttachment();
+        HttpFrame f = att.getUncompleteFrame();
         if (f == null) {
             f = allocFrame(ch.getEventLoop());
         } else {
@@ -252,12 +252,12 @@ public class HttpCodec extends ProtocolCodec {
         }
         if (decode_state == decode_state_complate) {
             if (remove) {
-                attr.setUncompleteFrame(null);
+                att.setUncompleteFrame(null);
             }
             return f;
         } else {
             f.setDecodeState(decode_state);
-            attr.setUncompleteFrame(f);
+            att.setUncompleteFrame(f);
             return null;
         }
     }
@@ -297,7 +297,7 @@ public class HttpCodec extends ProtocolCodec {
         boolean inline = this.inline;
         HttpFrame f = (HttpFrame) frame;
         FastThreadLocal l = FastThreadLocal.get();
-        HttpAttr attr = (HttpAttr) ch.getAttachment();
+        HttpAttachment att = (HttpAttachment) ch.getAttachment();
         List<byte[]> encode_bytes_array = getEncodeBytesArray(l);
         Object content = f.getContent();
         ByteBuf contentBuf = null;
@@ -355,10 +355,10 @@ public class HttpCodec extends ProtocolCodec {
         ByteBuf buf;
         boolean offer = true;
         if (inline) {
-            buf = attr.getLastWriteBuf();
+            buf = att.getLastWriteBuf();
             if (buf.isReleased() || buf.capacity() - buf.limit() < len) {
                 buf = ch.alloc().allocate(len);
-                attr.setLastWriteBuf(buf);
+                att.setLastWriteBuf(buf);
             } else {
                 offer = false;
                 buf.absPos(buf.absLimit());
@@ -394,7 +394,7 @@ public class HttpCodec extends ProtocolCodec {
                 buf.put(contentArray);
             } else {
                 if (inline) {
-                    attr.setLastWriteBuf(ByteBuf.empty());
+                    att.setLastWriteBuf(ByteBuf.empty());
                 }
                 ch.write(buf.flip());
                 ch.write(contentBuf);
@@ -582,6 +582,11 @@ public class HttpCodec extends ProtocolCodec {
         }
         src.resetP();
         return false;
+    }
+    
+    @Override
+    protected Object newAttachment() {
+        return new HttpAttachment();
     }
 
     private static int read_line_range(ByteBuf src, int length, int limit) throws IOException {
