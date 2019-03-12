@@ -112,7 +112,7 @@ public class LengthValueCodec extends ProtocolCodec {
 
     @Override
     public String getProtocolId() {
-        return "FixedLength";
+        return "LengthValue";
     }
 
     @Override
