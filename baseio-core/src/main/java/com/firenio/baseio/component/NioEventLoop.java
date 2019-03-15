@@ -119,7 +119,7 @@ public final class NioEventLoop extends EventLoop implements Attributes {
         return attributes;
     }
 
-    private void channelIdle(ChannelIdleListener l, Channel ch, long lastIdleTime,
+    private static void channelIdle(ChannelIdleListener l, Channel ch, long lastIdleTime,
             long currentTime) {
         try {
             l.channelIdled(ch, lastIdleTime, currentTime);
@@ -137,26 +137,35 @@ public final class NioEventLoop extends EventLoop implements Attributes {
         }
         //FIXME ..optimize sharable group
         if (sharable) {
+            channel_idle_share(channels, lastIdleTime, currentTime);
+        } else {
+            channel_idle(group.getContext(), channels, lastIdleTime, currentTime);
+        }
+    }
+
+    private static void channel_idle(ChannelContext context, IntMap<Channel> channels,
+            long lastIdleTime, long currentTime) {
+        List<ChannelIdleListener> ls = context.getChannelIdleEventListeners();
+        for (int i = 0; i < ls.size(); i++) {
+            ChannelIdleListener l = ls.get(i);
             for (channels.scan(); channels.hasNext();) {
                 Channel ch = channels.nextValue();
-                ChannelContext context = ch.getContext();
-                List<ChannelIdleListener> ls = context.getChannelIdleEventListeners();
-                if (ls.size() == 1) {
-                    channelIdle(ls.get(0), ch, lastIdleTime, currentTime);
-                } else {
-                    for (int i = 0; i < ls.size(); i++) {
-                        channelIdle(ls.get(i), ch, lastIdleTime, currentTime);
-                    }
-                }
+                channelIdle(l, ch, lastIdleTime, currentTime);
             }
-        } else {
-            ChannelContext context = group.getContext();
+        }
+    }
+
+    private static void channel_idle_share(IntMap<Channel> channels, long lastIdleTime,
+            long currentTime) {
+        for (channels.scan(); channels.hasNext();) {
+            Channel ch = channels.nextValue();
+            ChannelContext context = ch.getContext();
             List<ChannelIdleListener> ls = context.getChannelIdleEventListeners();
-            for (int i = 0; i < ls.size(); i++) {
-                ChannelIdleListener l = ls.get(i);
-                for (channels.scan(); channels.hasNext();) {
-                    Channel ch = channels.nextValue();
-                    channelIdle(l, ch, lastIdleTime, currentTime);
+            if (ls.size() == 1) {
+                channelIdle(ls.get(0), ch, lastIdleTime, currentTime);
+            } else {
+                for (int i = 0; i < ls.size(); i++) {
+                    channelIdle(ls.get(i), ch, lastIdleTime, currentTime);
                 }
             }
         }
