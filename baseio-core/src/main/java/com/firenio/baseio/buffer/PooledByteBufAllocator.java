@@ -51,27 +51,22 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
         }
     }
 
-    private long                        address = -1;
-    private final int[]                 blockEnds;
-    private final Stack<ByteBuf>        bufBuffer;
-    private final int                   capacity;
-    private ByteBuffer                  directMemory;
-    private final BitSet                frees;
-    private final ByteBufAllocatorGroup group;
-    private final int                   groupSize;
-    private byte[]                      heapMemory;
-    private final boolean               isDirect;
-    private final ReentrantLock         lock    = new ReentrantLock();
-    private int                         mark;
-    private final int                   nextIndex;
-    private final int                   unit;
+    private long                 address = -1;
+    private final int[]          blockEnds;
+    private final Stack<ByteBuf> bufBuffer;
+    private final int            capacity;
+    private ByteBuffer           directMemory;
+    private final BitSet         frees;
+    private byte[]               heapMemory;
+    private final boolean        isDirect;
+    private final ReentrantLock  lock    = new ReentrantLock();
+    private int                  mark;
+    private final int            unit;
 
-    public PooledByteBufAllocator(ByteBufAllocatorGroup group, int index) {
-        this.group = group;
+    public PooledByteBufAllocator(ByteBufAllocatorGroup group) {
         this.unit = group.getUnit();
         this.isDirect = group.isDirect();
         this.capacity = group.getCapacity();
-        this.groupSize = group.getGroupSize();
         this.frees = new BitSet(getCapacity());
         this.blockEnds = new int[getCapacity()];
         if (BYTEBUF_RECYCLE) {
@@ -79,11 +74,6 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
         } else {
             bufBuffer = null;
         }
-        int nextIndex = index + 1;
-        if (nextIndex == groupSize) {
-            nextIndex = 0;
-        }
-        this.nextIndex = nextIndex;
     }
 
     @Override
@@ -97,27 +87,8 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
 
     @Override
     public ByteBuf allocate(int limit) {
-        if (Develop.BUF_DEBUG) {
-            ByteBuf buf = allocate(limit, 0);
-            if (buf != null && buf.isPooled()) {
-                BufDebug d = new BufDebug();
-                d.buf = buf;
-                d.e = new Exception(DateUtil.get().formatYyyy_MM_dd_HH_mm_ss_SSS());
-                BUF_DEBUGS.put(buf, d);
-            }
-            return buf;
-        } else {
-            return allocate(limit, 0);
-        }
-    }
-
-    private ByteBuf allocate(int limit, int current) {
         if (limit < 1) {
             return null;
-        }
-        if (current == groupSize) {
-            // FIXME 是否申请java内存
-            return ByteBuf.heap(limit);
         }
         int size = (limit + unit - 1) / unit;
         int blockStart;
@@ -132,10 +103,20 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
         } finally {
             lock.unlock();
         }
+        ByteBuf buf;
         if (blockStart == -1) {
-            return getNext().allocate(limit, current + 1);
+            // FIXME 是否申请java内存
+            return ByteBuf.heap(limit);
+        } else {
+            buf = newByteBuf().produce(blockStart, blockEnds[blockStart]);
+            if (Develop.BUF_DEBUG) {
+                BufDebug d = new BufDebug();
+                d.buf = buf;
+                d.e = new Exception(DateUtil.get().formatYyyy_MM_dd_HH_mm_ss_SSS());
+                BUF_DEBUGS.put(buf, d);
+            }
+            return buf;
         }
-        return newByteBuf().produce(blockStart, blockEnds[blockStart]);
     }
 
     // FIXME 判断余下的是否足够，否则退出循环
@@ -157,7 +138,6 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
                 blockEnds[blockStart] = blockEnd;
                 this.mark = blockEnd;
                 return blockStart;
-                //                return newByteBuf().produce(blockStart, blockEnd, limit);
             }
             start++;
         }
@@ -279,10 +259,6 @@ public final class PooledByteBufAllocator extends ByteBufAllocator {
 
     protected byte[] getHeapMemory() {
         return heapMemory;
-    }
-
-    protected PooledByteBufAllocator getNext() {
-        return group.getAllocator(nextIndex);
     }
 
     public PoolState getState() {
